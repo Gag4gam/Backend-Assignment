@@ -2,17 +2,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cheerio from 'cheerio';
+import { z } from 'zod';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(__dirname, '..', 'cache');
+const OUTPUT_DIR = path.resolve(__dirname, '..', 'output');
 
 const START_URL = 'https://books.toscrape.com/catalogue/page-1.html';
 const MAX_PAGES = 3;
 const REQUEST_DELAY_MS = 600;
 
 const HEADERS = {
-  'User-Agent': 'FlyRankInternship-A9/1.0 (+https://github.com/your-username/your-repo)'
+  'User-Agent': 'FlyRankInternship-A5/1.0 (+https://github.com/your-username/your-repo)'
 };
+
+// --- Zod Schema Definition ---
+const BookSchema = z.object({
+  title: z.string().min(1),
+  product_url: z.string().url().startsWith('https://'),
+  price_text: z.string().min(1),
+  price_gbp: z.number().positive(),
+  availability_text: z.string().min(1),
+  rating_text: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  source_page: z.string().url().startsWith('https://'),
+  fetched_at: z.string().min(1)
+});
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -67,16 +83,23 @@ async function fetchPage(url) {
 }
 
 // Parse book data from product detail page
-function parseBookDetail(html, productUrl, sourcePage, fetchedAt) {
+function parseAndCleanBookDetail(html, productUrl, sourcePage, fetchedAt) {
   const $ = cheerio.load(html);
   const productMain = $('.product_main');
 
   const title = productMain.find('h1').text().trim();
   const priceText = productMain.find('p.price_color').text().trim();
+
+  const numericPriceMatch = priceText.match(/([\d.]+)/);
+  const priceGbp = numericPriceMatch ? parseFloat(numericPriceMatch[0]) : null;
+
+
   const availabilityText = productMain.find('p.instock.availability').text().replace(/\s+/g, ' ').trim();
+
   const starClasses = productMain.find('p.star-rating').attr('class') || '';
   const ratingMatch = starClasses.split(/\s+/).find((cls) => cls !== 'star-rating');
   const ratingText = ratingMatch || null;
+
   const descriptionElem = $('#product_description + p');
   const description = descriptionElem.length > 0 ? descriptionElem.text().trim() : null;
 
@@ -84,6 +107,7 @@ function parseBookDetail(html, productUrl, sourcePage, fetchedAt) {
     title,
     product_url: productUrl,
     price_text: priceText,
+    price_gbp: priceGbp,
     availability_text: availabilityText,
     rating_text: ratingText,
     description,
@@ -131,24 +155,38 @@ async function scrap() {
     }
   }
 
-  console.log(`\ncatalogue_pages=${pagesVisited} , discovered=${discoveredEntries.length} , unique_urls=${uniqueMap.size}\n`);
+  const validRecords = [];
+  const errorRecords = [];
 
-  // 2. Fetch and extract details for all unique books
-  const records = [];
   for (const [productUrl, sourcePage] of uniqueMap.entries()) {
     const pageResult = await fetchPage(productUrl);
-    if (pageResult) {
-      const record = parseBookDetail(pageResult.html, productUrl, sourcePage, pageResult.fetchedAt);
-      records.push(record);
+    if (!pageResult) {
+        errorRecords.push({ url: productUrl, error: 'Failed to fetch page' });
+        continue;
     }
+
+    const rawRecord = parseAndCleanBookDetail(pageResult.html, productUrl, sourcePage, pageResult.fetchedAt);
+
+    const validation = BookSchema.safeParse(rawRecord);
+    if (validation.success) {
+      validRecords.push(validation.data);
+    } else {
+        errorRecords.push({
+            raw: rawRecord,
+            errors: validation.error.format()
+        });
+    }
+}
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(OUTPUT_DIR, 'books.json'), JSON.stringify(validRecords, null, 2), 'utf-8');
+
+  if (errorRecords.length > 0) {
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'errors.json'), JSON.stringify(errorRecords, null, 2), 'utf-8');
   }
 
-  // 3. Print Checkpoint Output
-  if (records.length > 0) {
-    console.log('\n--- SAMPLE RAW RECORD ---');
-    console.log(JSON.stringify(records[0], null, 2));
-  }
-  console.log(`\ndetail_pages=${records.length}`);
+  console.log(`\n--- CHECKPOINT RESULT ---`);
+  console.log(`books.json count: ${validRecords.length}`);
+  console.log(`errors.json count: ${errorRecords.length}`);
 }
 
 scrap();

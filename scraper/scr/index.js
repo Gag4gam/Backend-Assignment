@@ -13,7 +13,7 @@ const MAX_PAGES = 3;
 const REQUEST_DELAY_MS = 600;
 
 const HEADERS = {
-  'User-Agent': 'FlyRankInternship-A9/1.0 (+https://github.com/your-username/your-repo)'
+  'User-Agent': 'FlyRankInternship-A9/1.0 (+https://github.com/Gag4gam/Backend-Assignment)'
 };
 
 const metrics = {

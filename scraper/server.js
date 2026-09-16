@@ -1,12 +1,19 @@
 import express from 'express';
 import { EnrichInputSchema, EnrichOutputSchema, STUB_RESPONSE } from './src/llm/schema.js';
+import { processEnrichment } from './src/llm/client.js';
 
 const app = express();
 app.use(express.json());
 
-// POST /enrich endpoint
-app.post('/enrich', (req, res) => {
-  // 1. Validate incoming body with Zod
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    console.log(`[${req.method}] ${req.originalUrl} -> Status: ${res.statusCode}`);
+  });
+  next();
+});
+
+app.post('/enrich', async (req, res) => {
+  // Input validation
   const inputValidation = EnrichInputSchema.safeParse(req.body);
 
   if (!inputValidation.success) {
@@ -21,14 +28,28 @@ app.post('/enrich', (req, res) => {
     });
   }
 
-  // 2. Stub mode (LLM_STUB=1)
+  // Stub mode
   if (process.env.LLM_STUB === '1') {
     const validatedStub = EnrichOutputSchema.parse(STUB_RESPONSE);
     return res.status(200).json(validatedStub);
   }
 
-  // Real LLM call will be wired in Stage 2
-  return res.status(501).json({ message: 'Live model call not wired yet. Set LLM_STUB=1.' });
+  // Live Model Pipeline (Parse -> Validate -> Repair -> Quarantine)
+  try {
+    const result = await processEnrichment(inputValidation.data);
+
+    if (!result.success) {
+      return res.status(result.status || 422).json({
+        error: result.error,
+        details: result.details
+      });
+    }
+
+    return res.status(200).json(result.data);
+  } catch (error) {
+    console.error('Unhandled enrichment failure:', error);
+    return res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;

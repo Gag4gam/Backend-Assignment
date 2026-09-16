@@ -1,0 +1,90 @@
+[
+  {
+    "id": 1,
+    "input": {
+      "title": "A Light in the Attic",
+      "price_text": "£51.77",
+      "availability_text": "In stock (22 available)",
+      "rating_text": "Three",
+      "description": "It's hard to imagine anyone reading this collection of poems without a grin on their face."
+    },
+    "expected_category": "Poetry"
+  },
+  {
+    "id": 2,
+    "input": {
+      "title": "Sapiens: A Brief History of Humankind",
+      "price_text": "£54.23",
+      "availability_text": "In stock (20 available)",
+      "rating_text": "Five",
+      "description": "100,000 years ago, at least six human species inhabited the earth. Today there is just one. Us. Homo sapiens."
+    },
+    "expected_category": "Nonfiction"
+  },
+  {
+    "id": 3,
+    "input": {
+      "title": "The Cat in the Hat",
+      "price_text": "£16.29",
+      "availability_text": "In stock (10 available)",
+      "rating_text": "Four",
+      "description": "Dick and Sally are stuck on a rainy day with their cold, cold, wet day until the Cat in the Hat appears."
+    },
+    "expected_category": "Children"
+  },
+  {
+    "id": 4,
+    "input": {
+      "title": "Principles of Neural Science, Fifth Edition",
+      "price_text": "£142.99",
+      "availability_text": "In stock (3 available)",
+      "rating_text": "Five",
+      "description": "The definitive textbook on neuroscience that covers cellular and molecular biology, cognition, and disease."
+    },
+    "expected_category": "Academic"
+  },
+  {
+    "id": 5,
+    "input": {
+      "title": "The Hunger Games",
+      "price_text": "£29.99",
+      "availability_text": "In stock (5 available)",
+      "rating_text": "Five",
+      "description": "In the ruins of a place once known as North America lies the nation of Panem, where twelve boys and twelve girls are forced to fight."
+    },
+    "expected_category": "Young Adult"
+  },
+  {
+    "id": 6,
+    "input": {
+      "title": "The Mona Lisa and Other Portraits",
+      "price_text": "£35.00",
+      "availability_text": "In stock (4 available)",
+      "rating_text": "Three",
+      "description": "A deep analysis into Renaissance portrait techniques, oil pigments, and Da Vinci's composition."
+    },
+    "expected_category": "Art"
+  },
+  {
+    "id": 7,
+    "input": {
+      "title": "The Time Traveler's Guide to 2099",
+      "price_text": "£12.50",
+      "availability_text": "In stock (2 available)",
+      "rating_text": "Two",
+      "description": "Part comedic sci-fi journey, part mock-instructional handbook explaining futuristic societal norms."
+    },
+    "expected_category": "Fiction"
+  },
+  {
+    "id": 8,
+    "input": {
+      "title": "Random String X992-K",
+      "price_text": "£0.00",
+      "availability_text": "In stock (1 available)",
+      "rating_text": "One",
+      "description": null
+    },
+    "expected_category": "Other"
+  }
+]

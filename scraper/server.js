@@ -13,31 +13,23 @@ app.use((req, res, next) => {
 });
 
 app.post('/enrich', async (req, res) => {
-  // Input validation
   const inputValidation = EnrichInputSchema.safeParse(req.body);
 
   if (!inputValidation.success) {
-    const errorDetails = inputValidation.error.issues.map((issue) => ({
-      field: issue.path.join('.'),
-      message: issue.message
-    }));
-
     return res.status(400).json({
       error: 'Invalid request payload',
-      details: errorDetails
+      details: inputValidation.error.issues
     });
   }
 
-  // Stub mode
   if (process.env.LLM_STUB === '1') {
-    const validatedStub = EnrichOutputSchema.parse(STUB_RESPONSE);
-    return res.status(200).json(validatedStub);
+    return res.status(200).json(EnrichOutputSchema.parse(STUB_RESPONSE));
   }
 
-  // Live Model Pipeline (Parse -> Validate -> Repair -> Quarantine)
   try {
     const result = await processEnrichment(inputValidation.data);
 
+    // If parsing/repairing failed, return 422 cleanly
     if (!result.success) {
       return res.status(result.status || 422).json({
         error: result.error,
@@ -45,6 +37,7 @@ app.post('/enrich', async (req, res) => {
       });
     }
 
+    // 5. Always return validated schema-shaped object (never raw text)
     return res.status(200).json(result.data);
   } catch (error) {
     console.error('Unhandled enrichment failure:', error);

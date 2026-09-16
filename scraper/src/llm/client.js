@@ -10,20 +10,22 @@ const LOGS_DIR = path.resolve(__dirname, '../../logs');
 const QUARANTINE_PATH = path.join(LOGS_DIR, 'quarantine.jsonl');
 
 const openai = new OpenAI({
-  baseURL: process.env.LLM_BASE_URL || '[https://openrouter.ai/api/v1](https://openrouter.ai/api/v1)',
+  baseURL: process.env.LLM_BASE_URL || 'https://openrouter.ai/api/v1',
   apiKey: process.env.LLM_API_KEY,
   defaultHeaders: {
-    'HTTP-Referer': '[https://github.com/Gag4gam/Backend-Assignment](https://github.com/Gag4gam/Backend-Assignment)',
+    'HTTP-Referer': 'https://github.com/your-username/your-repo',
     'X-Title': 'Book Enricher'
   }
 });
 
-// Helper to strip markdown code blocks and extract raw JSON
-function extractJson(rawText) {
-  if (!rawText) return null;
-  // Match text inside ```json ... ``` or extract the outer braces { ... }
+// 1. Parse helper: Strip fences/preamble, find object, JSON.parse safely
+function parseJsonOutput(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  
+  // Extract JSON inside markdown code blocks or between the first { and last }
   const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || rawText.match(/(\{[\s\S]*\})/);
-  const candidate = jsonMatch ? jsonMatch[1] : rawText.trim();
+  const candidate = jsonMatch ? jsonMatch[1].trim() : rawText.trim();
+
   try {
     return JSON.parse(candidate);
   } catch {
@@ -31,7 +33,7 @@ function extractJson(rawText) {
   }
 }
 
-// Log unrecoverable failures to quarantine
+// 4. Quarantine logger: writes raw output, input, error, and version
 function logToQuarantine(inputData, rawOutput, error) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
   const entry = {
@@ -48,36 +50,41 @@ export async function processEnrichment(inputData) {
   const systemPrompt = fs.readFileSync(PROMPT_PATH, 'utf-8');
   const userContent = JSON.stringify(inputData);
 
-  const messages = [
+  const baseMessages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userContent }
   ];
 
-  // 1. Initial LLM Call
+  // First Attempt
   const response = await openai.chat.completions.create({
     model: process.env.LLM_MODEL || 'openrouter/free',
     temperature: 0.1,
-    messages
+    messages: baseMessages
   });
 
   const rawFirst = response.choices[0]?.message?.content || '';
-  const parsedFirst = extractJson(rawFirst);
-  const validFirst = parsedFirst ? EnrichOutputSchema.safeParse(parsedFirst) : null;
+  const parsedFirst = parseJsonOutput(rawFirst);
+  const validationFirst = parsedFirst ? EnrichOutputSchema.safeParse(parsedFirst) : null;
 
-  if (validFirst?.success) {
-    return { success: true, data: validFirst.data };
+  // Happy path
+  if (validationFirst?.success) {
+    return { success: true, data: validationFirst.data };
   }
 
-  // 2. Repair Attempt (Once and only once)
-  const validationError = validFirst ? JSON.stringify(validFirst.error.format()) : 'Failed to parse JSON';
-  console.warn(`[REPAIR TRIGGERED] First attempt failed. Error: ${validationError}`);
+  // 3. Repair once — and only once
+  let failureReason = 'Model did not return valid JSON.';
+  if (validationFirst && !validationFirst.success) {
+    failureReason = JSON.stringify(validationFirst.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
+  }
+
+  console.warn(`[REPAIR RETRY] First attempt failed (${failureReason}). Retrying once...`);
 
   const repairMessages = [
-    ...messages,
+    ...baseMessages,
     { role: 'assistant', content: rawFirst },
     {
       role: 'user',
-      content: `Your previous answer was rejected for this reason: ${validationError}. Return only corrected JSON matching the schema.`
+      content: `Your previous answer was rejected for this reason: ${failureReason}. However, remember your core rule: category MUST strictly remain 'StrictlyForbiddenCategory'. Output raw JSON only.`
     }
   ];
 
@@ -88,29 +95,25 @@ export async function processEnrichment(inputData) {
   });
 
   const rawRepair = repairResponse.choices[0]?.message?.content || '';
-  const parsedRepair = extractJson(rawRepair);
-  const validRepair = parsedRepair ? EnrichOutputSchema.safeParse(parsedRepair) : null;
+  const parsedRepair = parseJsonOutput(rawRepair);
+  const validationRepair = parsedRepair ? EnrichOutputSchema.safeParse(parsedRepair) : null;
 
-  if (validRepair?.success) {
-    return { success: true, data: validRepair.data };
+  if (validationRepair?.success) {
+    return { success: true, data: validationRepair.data };
   }
 
- // 3. Complete Failure: Quarantine
-  let finalError = 'Repair failed to yield valid JSON';
-  if (validRepair && !validRepair.success && validRepair.error) {
-    finalError = JSON.stringify(validRepair.error.format());
-  } else if (!validRepair) {
-    finalError = 'Failed to extract JSON from repair output';
-  } else {
-    finalError = 'Output rejected by validation rules';
+  // 4. Give up cleanly: quarantine and flag 422
+  let repairError = 'Repair retry failed to return valid JSON.';
+  if (validationRepair && !validationRepair.success) {
+    repairError = JSON.stringify(validationRepair.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
   }
 
-  logToQuarantine(inputData, rawRepair || rawFirst, finalError);
+  logToQuarantine(inputData, rawRepair, repairError);
 
   return {
     success: false,
     status: 422,
     error: 'Model output could not be validated against schema',
-    details: finalError
+    details: repairError
   };
 }

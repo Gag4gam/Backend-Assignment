@@ -105,3 +105,7 @@ curl -i -X POST http://localhost:3000/enrich -H "Content-Type: application/json"
 Start the server from inside the `scraper/` directory:
 ```bash
 node --env-file=.env server.js
+```
+
+### LLM Retry Policy
+SDK auto-retries are disabled (`maxRetries: 0`). Custom retry logic handles timeouts, 429, and 5xx errors using exponential backoff with jitter (1s, 2s, 4s + jitter) while respecting `Retry-After`. 400, 401, and 403 errors fail immediately without retrying.

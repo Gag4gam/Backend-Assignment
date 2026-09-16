@@ -1,4 +1,5 @@
 import express from 'express';
+import { APIConnectionTimeoutError } from 'openai'; // <-- Add this import
 import { EnrichInputSchema, EnrichOutputSchema, STUB_RESPONSE } from './src/llm/schema.js';
 import { processEnrichment } from './src/llm/client.js';
 
@@ -12,6 +13,19 @@ app.use((req, res, next) => {
   next();
 });
 
+function getDeterministicFallback(data) {
+  const qualityFlags = [];
+  if (!data.description || data.description.trim().length === 0) {
+    qualityFlags.push('missing_description');
+  }
+
+  return {
+    category: 'Other',
+    summary: `${data.title} is available in the catalogue.`,
+    quality_flags: qualityFlags
+  };
+}
+
 app.post('/enrich', async (req, res) => {
   const inputValidation = EnrichInputSchema.safeParse(req.body);
 
@@ -22,6 +36,11 @@ app.post('/enrich', async (req, res) => {
     });
   }
 
+  if (process.env.LLM_ENABLED === 'false') {
+    const fallback = getDeterministicFallback(inputValidation.data);
+    return res.status(200).json(EnrichOutputSchema.parse(fallback));
+  }
+
   if (process.env.LLM_STUB === '1') {
     return res.status(200).json(EnrichOutputSchema.parse(STUB_RESPONSE));
   }
@@ -29,7 +48,6 @@ app.post('/enrich', async (req, res) => {
   try {
     const result = await processEnrichment(inputValidation.data);
 
-    // If parsing/repairing failed, return 422 cleanly
     if (!result.success) {
       return res.status(result.status || 422).json({
         error: result.error,
@@ -37,9 +55,27 @@ app.post('/enrich', async (req, res) => {
       });
     }
 
-    // 5. Always return validated schema-shaped object (never raw text)
     return res.status(200).json(result.data);
   } catch (error) {
+    // 1. Timeout -> 504 Gateway Timeout
+    if (
+      error instanceof APIConnectionTimeoutError ||
+      error.name === 'APIConnectionTimeoutError' ||
+      error.code === 'ETIMEDOUT'
+    ) {
+      return res.status(504).json({ error: 'LLM provider timed out after 30 seconds' });
+    }
+
+    // 2. Auth failure -> 502 Bad Gateway
+    if (error.status === 401 || error.status === 403) {
+      return res.status(502).json({ error: 'LLM provider authentication failed' });
+    }
+
+    // 3. Upstream downtime/rate limit -> 503 Service Unavailable
+    if (error.status === 429 || (error.status >= 500 && error.status <= 599)) {
+      return res.status(503).json({ error: 'LLM provider temporarily unavailable' });
+    }
+
     console.error('Unhandled enrichment failure:', error);
     return res.status(500).json({ error: 'Internal server error', message: error.message });
   }

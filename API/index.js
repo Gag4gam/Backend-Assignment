@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+import { EnrichInputSchema, EnrichOutputSchema, STUB_RESPONSE } from './src/llm/schema.js';
 const supabase = require('./supabase');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./openapi.json');

@@ -87,5 +87,21 @@ The data is already in the raw HTML, when the script sends a basic HTTP GET requ
 - Its never okay to bypass authentication barriers, login gates, paywalls, CAPTCHA's or IP blocks.
 - one should colelct only the specific fields necessary for the application, rate-limit your traffic, and honor robots.txt guidelines.
 
+## Testing POST /enrich (Stub Mode)
 
+### Valid Request (Expect 200 OK)
+```bash
+curl -i -X POST http://localhost:3000/enrich -H "Content-Type: application/json" -d "{\"title\": \"A Light in the Attic\", \"price_text\": \"£51.77\", \"availability_text\": \"In stock (22 available)\", \"rating_text\": \"Three\", \"description\": \"A book of poetry.\"}"
+```
+### Invalid request - Missing Required Field (Expect 400 Bad Request)
+```bash
+curl -i -X POST http://localhost:3000/enrich -H "Content-Type: application/json" -d "{\"price_text\": \"£51.77\"}"
+```
 
+---
+
+#### 8. Test the Checkpoint
+
+Start the server from inside the `scraper/` directory:
+```bash
+node --env-file=.env server.js

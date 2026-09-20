@@ -1,0 +1,15 @@
+{
+  "name": "report-generator",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server1.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.63.0"
+  }
+}

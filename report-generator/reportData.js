@@ -29,6 +29,14 @@ export function getReportData(dbPath = 'report.db') {
         `)
         .all();
 
+    const allBooks = db
+    .prepare(`
+      SELECT id, title, price, rating
+      FROM books
+      ORDER BY id ASC
+    `)
+    .all();
+
     db.close();
 
     return {
@@ -36,5 +44,6 @@ export function getReportData(dbPath = 'report.db') {
         averagePrice: avgPrice,
         topExpensiveBooks,
         booksPerRating,
+        allBooks,
     };
 }

@@ -13,7 +13,19 @@ db.exec(`
     );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 db.exec('DELETE FROM books;');
+
+db.exec('DELETE FROM reports;');
+
+
 
 const rawData = fs.readFileSync('books.json', 'utf-8');
 const books = JSON.parse(rawData);

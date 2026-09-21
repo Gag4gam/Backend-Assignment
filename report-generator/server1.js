@@ -31,12 +31,37 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// POST /reports: Idempotent report generation
 app.post('/reports', async (req, res) => {
   try {
-    const data = getReportData();
+    const force = Boolean(req.body?.force);
 
+    // 1. Idempotency check: look for any report generated today
+    if (!force) {
+      const existingReport = db
+        .prepare(`
+          SELECT id, path, created_at 
+          FROM reports 
+          WHERE date(created_at) = date('now')
+          ORDER BY id DESC 
+          LIMIT 1
+        `)
+        .get();
+
+      // If already generated today and the file exists on disk, return 200 with the existing report
+      if (existingReport && fs.existsSync(existingReport.path)) {
+        return res.status(200).json({
+          id: existingReport.id,
+          file: `/reports/${existingReport.id}/file`,
+        });
+      }
+    }
+
+    // 2. Query and HTML rendering
+    const data = getReportData();
     const html = generateReportHtml(data);
 
+    // 3. Reserve a new row in reports
     const insertStmt = db.prepare('INSERT INTO reports (path) VALUES (?)');
     const result = insertStmt.run('pending');
     const reportId = result.lastInsertRowid;
@@ -44,6 +69,7 @@ app.post('/reports', async (req, res) => {
     const fileName = `${reportId}.pdf`;
     const filePath = path.join(reportsDir, fileName);
 
+    // 4. Render with Playwright
     const browser = await chromium.launch();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'load' });
@@ -54,15 +80,16 @@ app.post('/reports', async (req, res) => {
     });
     await browser.close();
 
+    // 5. Update path and return 201 Created
     db.prepare('UPDATE reports SET path = ? WHERE id = ?').run(filePath, reportId);
 
-    res.status(201).json({
+    return res.status(201).json({
       id: reportId,
       file: `/reports/${reportId}/file`,
     });
   } catch (error) {
-    console.error('Erro ao gerar relatório:', error);
-    res.status(500).json({ error: 'Falha ao processar o relatório' });
+    console.error('Error generating report:', error);
+    return res.status(500).json({ error: 'Failed to generate report' });
   }
 });
 

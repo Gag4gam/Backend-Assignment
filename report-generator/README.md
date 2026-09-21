@@ -89,3 +89,5 @@ Content-Type: application/json; charset=utf-8
 > This daily check protects against accidental double-submissions caused by repeated clicks, client retries, or multiple workers requesting duplicate resources for the same day. In real-world systems, omitting an idempotency check can cost money by triggering duplicate payment gateway charges or dispatching duplicate paid transactional emails/SMS to customers.
 
 ## Report Preview
+
+<img width="520" height="737" alt="Captura de tela 2026-09-21 002307" src="https://github.com/user-attachments/assets/2b220ecb-6141-4661-a630-a5c69e9f4d2d" />
